@@ -1,4 +1,5 @@
 const attendanceService = require('./attendance.service');
+const Attendance = require('../../models/Attendance'); // Move to top
 
 exports.startSession = async (req, res) => {
     try {
@@ -6,6 +7,7 @@ exports.startSession = async (req, res) => {
         const session = await attendanceService.createClassSession(req.user.id, req.body);
         res.status(201).json({ success: true, data: session });
     } catch (err) {
+        // Use 400 for validation errors, 500 for server crashes
         res.status(400).json({ success: false, message: err.message });
     }
 };
@@ -22,11 +24,9 @@ exports.markAttendance = async (req, res) => {
         res.status(403).json({ success: false, message: err.message });
     }
 };
-// @desc    Get all attendance records (with student names)
-// @route   GET /api/attendance/list
+
 exports.getAttendanceList = async (req, res) => {
     try {
-        const Attendance = require('../../models/Attendance');
         // This 'populates' the ID with the actual name/email from the User model
         const list = await Attendance.find()
             .populate('studentId', 'name email')
