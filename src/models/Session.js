@@ -8,8 +8,8 @@ const SessionSchema = new mongoose.Schema({
         lng: { type: Number, required: true }
     },
     qrToken: { type: String, required: true, unique: true },
-    radius: { type: Number, default: 50 }, // Geofence radius in meters
-    expiresAt: { type: Date, required: true }, // Time-lock constraint
+    radius: { type: Number, default: 50 }, 
+    expiresAt: { type: Date, required: true }, // Set dynamically based on user input
     isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 
