@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('./auth.controller');
-
+const userController = require('./user.controller'); 
 
 // IMPORT THE MIDDLEWARE HERE
 const { protect } = require('../../middleware/auth.middleware'); 
@@ -14,6 +14,6 @@ router.post('/login', authController.login);
 
 // @desc    Get User Profile & Dashboard Stats
 // Now 'protect' is defined and will work
-router.get('/profile', protect, authController.getUserProfile);
+router.get('/profile', protect, userController.getUserProfile);
 
 module.exports = router;
