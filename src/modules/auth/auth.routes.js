@@ -2,12 +2,18 @@ const express = require('express');
 const router = express.Router();
 const authController = require('./auth.controller');
 
-// @desc    Register a new user (Student or Professor)
-// @route   POST /api/auth/register
+
+// IMPORT THE MIDDLEWARE HERE
+const { protect } = require('../../middleware/auth.middleware'); 
+
+// @desc    Register a new user
 router.post('/register', authController.register);
 
 // @desc    Authenticate user & get token
-// @route   POST /api/auth/login
 router.post('/login', authController.login);
+
+// @desc    Get User Profile & Dashboard Stats
+// Now 'protect' is defined and will work
+router.get('/profile', protect, authController.getUserProfile);
 
 module.exports = router;

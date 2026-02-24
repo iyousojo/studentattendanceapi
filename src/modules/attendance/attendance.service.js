@@ -28,15 +28,29 @@ exports.processStudentScan = async (studentId, data) => {
 
     if (new Date() > session.expiresAt) throw new Error("Session expired.");
 
+    // 1. Triple-Lock: Location Verification
     const distance = geoUtil.calculateDistance(lat, lng, session.location.lat, session.location.lng);
     if (distance > session.radius) throw new Error("Too far from classroom.");
 
     const alreadyMarked = await repo.hasStudentMarked(studentId, session._id);
     if (alreadyMarked) throw new Error("Already marked present.");
 
+    // 2. Triple-Lock: Time Verification (Late Detection)
+    // If student scans 10 mins after session was created, they are 'late'
+    const sessionStartTime = new Date(session.createdAt).getTime();
+    const currentTime = new Date().getTime();
+    const minutesElapsed = (currentTime - sessionStartTime) / 60000;
+
+    let attendanceStatus = 'present';
+    if (minutesElapsed > 10) {
+        attendanceStatus = 'late';
+    }
+
+    // 3. Save with Status
     return await repo.saveAttendance({
         studentId,
         sessionId: session._id,
-        locationAtScan: { lat, lng }
+        locationAtScan: { lat, lng },
+        status: attendanceStatus // Save as 'present' or 'late'
     });
 };
