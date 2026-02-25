@@ -1,23 +1,17 @@
 const Session = require('../../models/Session');
 const Attendance = require('../../models/Attendance');
 
-// Save a new session created by a Professor
-exports.saveSession = async (sessionData) => {
-    return await Session.create(sessionData);
+exports.saveSession = async (data) => await Session.create(data);
+exports.findSessionByToken = async (token) => await Session.findOne({ qrToken: token, isActive: true });
+exports.saveAttendance = async (data) => await Attendance.create(data);
+exports.hasStudentMarked = async (sid, sessid) => await Attendance.exists({ studentId: sid, sessionId: sessid });
+
+exports.getAttendeesBySession = async (sessionId) => {
+    return await Attendance.find({ sessionId })
+        .populate('studentId', 'name email profileImage')
+        .sort({ createdAt: -1 });
 };
 
-// Check if a session exists by token
-exports.findSessionByToken = async (qrToken) => {
-    return await Session.findOne({ qrToken, isActive: true });
-};
-
-// Save student attendance record
-exports.saveAttendance = async (attendanceData) => {
-    return await Attendance.create(attendanceData);
-};
-
-// Find if student already marked attendance for this session
-exports.hasStudentMarked = async (studentId, sessionId) => {
-    // .exists() is even faster than .findOne() if you only care if it exists
-    return await Attendance.exists({ studentId, sessionId });
+exports.getProfessorSessions = async (professorId) => {
+    return await Session.find({ professorId }).sort({ createdAt: -1 });
 };
