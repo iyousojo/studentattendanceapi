@@ -47,7 +47,16 @@ exports.getSessionDetails = async (req, res) => {
     try {
         const { sessionId } = req.params;
         const attendees = await attendanceService.getAttendeesBySession(sessionId);
-        res.status(200).json({ success: true, attendees });
+        
+        // ADD THIS: Fetch the session info directly so the QR screen has data
+        const Session = require('../../models/Session'); // Ensure path is correct
+        const session = await Session.findById(sessionId);
+
+        res.status(200).json({ 
+            success: true, 
+            session, // This provides qrToken, courseCode, and lateAfterMins
+            attendees 
+        });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
