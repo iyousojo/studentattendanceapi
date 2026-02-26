@@ -1,3 +1,4 @@
+// routes/attendance.routes.js (or wherever your file is)
 const express = require('express');
 const router = express.Router();
 const attendanceController = require('./attendance.controller');
@@ -5,6 +6,7 @@ const { protect, isProfessor } = require('../../middleware/auth.middleware');
 
 router.post('/session', protect, isProfessor, attendanceController.startSession);
 router.post('/scan', protect, attendanceController.markAttendance);
+router.post('/manual', protect, attendanceController.markAttendanceManual); // NEW: manual fallback
 router.get('/list', protect, attendanceController.getAttendanceList);
 
 // New Dashboard Routes

@@ -1,52 +1,145 @@
-const repo = require('./attendance.repo');
-const geoUtil = require('../../utils/geo.util');
+// services/attendance.service.js
+const Session = require('../../models/Session');
+const Attendance = require('../../models/Attendance');
 const crypto = require('crypto');
 
-exports.createClassSession = async (professorId, data) => {
-    const { courseCode, lat, lng, durationMins, radius, lateAfterMins } = data;
-    const duration = parseInt(durationMins) || 60;
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + duration);
+// <-- import the util you created
+// adjust the relative path if your services folder is in a different location.
+// This path assumes services file is two folders below src (e.g. src/modules/.../services)
+// If attendance.service.js is at src/services/attendance.service.js, change to '../utils/geo.util'
+const { calculateDistance } = require('../../utils/geo.util');
 
-    const qrToken = crypto.randomBytes(16).toString('hex');
+// helpers
+const generateQrToken = () => crypto.randomBytes(16).toString('hex');
+const generateBackupCode = () => Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit
 
-    return await repo.saveSession({
-        professorId,
-        courseCode: courseCode.toUpperCase(),
-        location: { lat, lng },
-        qrToken,
-        radius: radius || 50,
-        lateAfterMins: parseInt(lateAfterMins) || 15, // Store the manual late limit
-        expiresAt,
-        isActive: true
-    });
+exports.saveSession = async (data) => await Session.create(data);
+exports.findSessionByToken = async (token) => await Session.findOne({ qrToken: token, isActive: true });
+exports.saveAttendance = async (data) => await Attendance.create(data);
+exports.hasStudentMarked = async (sid, sessid) => await Attendance.exists({ studentId: sid, sessionId: sessid });
+
+exports.getAttendeesBySession = async (sessionId) => {
+  return await Attendance.find({ sessionId })
+    .populate('studentId', 'name email profileImage')
+    .sort({ createdAt: -1 });
 };
 
-exports.getProfessorSessions = async (id) => await repo.getProfessorSessions(id);
-exports.getAttendeesBySession = async (id) => await repo.getAttendeesBySession(id);
+exports.getProfessorSessions = async (professorId) => {
+  return await Session.find({ professorId }).sort({ createdAt: -1 });
+};
 
-exports.processStudentScan = async (studentId, data) => {
-    const { qrToken, lat, lng } = data;
-    const session = await repo.findSessionByToken(qrToken);
-    
-    if (!session || !session.isActive) throw new Error("Invalid or inactive session.");
-    if (new Date() > session.expiresAt) throw new Error("Session has expired.");
+/**
+ * Create a class session and optionally generate a backup code.
+ * data: { courseCode, lat, lng, durationMins, lateAfterMins, radius, generateBackup (bool) }
+ */
+exports.createClassSession = async (professorId, data) => {
+  const qrToken = generateQrToken();
+  const session = {
+    professorId,
+    courseCode: data.courseCode,
+    qrToken,
+    // keep backwards-compatible properties if callers use them
+    lat: data.lat,
+    lng: data.lng,
+    // also allow 'location' object if you prefer that in other parts of code
+    location: data.location ?? (data.lat && data.lng ? { lat: data.lat, lng: data.lng } : undefined),
+    radius: data.radius ?? 100,
+    durationMins: data.durationMins ?? 60,
+    lateAfterMins: data.lateAfterMins ?? 15,
+    startAt: new Date(),
+    isActive: true,
+  };
 
-    const distance = geoUtil.calculateDistance(lat, lng, session.location.lat, session.location.lng);
-    if (distance > session.radius) throw new Error(`Too far. Distance: ${Math.round(distance)}m`);
+  if (data.generateBackup !== false) {
+    const code = generateBackupCode();
+    session.backupCode = code;
+    const expiry = new Date();
+    expiry.setMinutes(expiry.getMinutes() + (session.durationMins || 60) + 30);
+    session.backupExpiresAt = expiry;
+  }
 
-    const alreadyMarked = await repo.hasStudentMarked(studentId, session._id);
-    if (alreadyMarked) throw new Error("Attendance already recorded.");
+  const created = await Session.create(session);
+  return created;
+};
 
-    // Dynamic Late Calculation based on the manual session setup
-    const minutesElapsed = (new Date() - new Date(session.createdAt)) / 60000;
-    const attendanceStatus = minutesElapsed > (session.lateAfterMins || 15) ? 'late' : 'present';
+/**
+ * Process a QR scan
+ * studentId: ObjectId, payload: { qrToken, lat, lng, accuracy }
+ */
+exports.processStudentScan = async (studentId, payload) => {
+  const session = await this.findSessionByToken(payload.qrToken);
+  if (!session) throw new Error('Session not found or inactive.');
 
-    return await repo.saveAttendance({
-        studentId,
-        sessionId: session._id,
-        locationAtScan: { lat, lng },
-        status: attendanceStatus,
-        distanceFromCenter: distance
-    });
+  // prevent duplicates
+  const already = await this.hasStudentMarked(studentId, session._id);
+  if (already) throw new Error('You have already marked attendance for this session.');
+
+  // Resolve session coords (support both legacy {lat,lng} and {location: {lat,lng}})
+  const sessionLat = (typeof session.lat === 'number') ? session.lat : session.location?.lat;
+  const sessionLng = (typeof session.lng === 'number') ? session.lng : session.location?.lng;
+
+  if (typeof payload.lat === 'number' && typeof payload.lng === 'number') {
+    if (sessionLat === undefined || sessionLng === undefined) {
+      throw new Error('Session location is not defined on server.');
+    }
+
+    // use the shared util
+    const dist = calculateDistance(sessionLat, sessionLng, payload.lat, payload.lng);
+
+    if (dist > (session.radius || 100)) {
+      const err = new Error(`Too far from session location (${Math.round(dist)}m).`);
+      err.distance = Math.round(dist);
+      err.radius = session.radius;
+      throw err;
+    }
+  }
+
+  // determine late/present using session.startAt and lateAfterMins
+  const now = new Date();
+  const diffMins = Math.floor((now - new Date(session.startAt)) / 60000);
+  const status = diffMins > (session.lateAfterMins || 15) ? 'late' : 'present';
+
+  const record = await Attendance.create({
+    studentId,
+    sessionId: session._id,
+    status,
+    method: 'qr',
+    recordedLat: payload.lat,
+    recordedLng: payload.lng,
+    recordedAccuracy: payload.accuracy,
+  });
+
+  return record;
+};
+
+/**
+ * Process manual code from a student.
+ * studentId: ObjectId, code: string
+ */
+exports.processManualCode = async (studentId, code) => {
+  if (!code) throw new Error('No backup code provided.');
+
+  const now = new Date();
+  const session = await Session.findOne({
+    backupCode: code,
+    isActive: true,
+    backupExpiresAt: { $gt: now }
+  });
+
+  if (!session) throw new Error('Invalid or expired backup code.');
+
+  const already = await this.hasStudentMarked(studentId, session._id);
+  if (already) throw new Error('You have already marked attendance for this session.');
+
+  const diffMins = Math.floor((now - new Date(session.startAt)) / 60000);
+  const status = diffMins > (session.lateAfterMins || 15) ? 'late' : 'present';
+
+  const record = await Attendance.create({
+    studentId,
+    sessionId: session._id,
+    status,
+    method: 'manual',
+  });
+
+  return { record, sessionId: session._id };
 };

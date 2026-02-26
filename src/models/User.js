@@ -1,3 +1,4 @@
+// models/User.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -19,7 +20,7 @@ const userSchema = new mongoose.Schema({
         type: String, 
         required: [true, 'Please add a password'],
         minlength: 6,
-        select: false // Doesn't return password by default in queries
+        select: false
     },
     role: { 
         type: String, 
@@ -28,26 +29,19 @@ const userSchema = new mongoose.Schema({
     },
     deviceId: { 
         type: String, 
-        default: null // Used to lock a student to one physical phone
+        default: null 
     }
-}, { 
-    timestamps: true 
-});
+}, { timestamps: true });
 
-// --- HOOKS ---
-
-// Encrypt password using bcrypt before saving
 userSchema.pre('save', async function(next) {
     if (!this.isModified('password')) {
-        next();
+        return next(); // IMPORTANT: return
     }
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
+    next();
 });
 
-// --- METHODS ---
-
-// Match user entered password to hashed password in database
 userSchema.methods.matchPassword = async function(enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
