@@ -2,11 +2,6 @@
 const Session = require('../../models/Session');
 const Attendance = require('../../models/Attendance');
 const crypto = require('crypto');
-
-// <-- import the util you created
-// adjust the relative path if your services folder is in a different location.
-// This path assumes services file is two folders below src (e.g. src/modules/.../services)
-// If attendance.service.js is at src/services/attendance.service.js, change to '../utils/geo.util'
 const { calculateDistance } = require('../../utils/geo.util');
 
 // helpers
@@ -30,32 +25,39 @@ exports.getProfessorSessions = async (professorId) => {
 
 /**
  * Create a class session and optionally generate a backup code.
- * data: { courseCode, lat, lng, durationMins, lateAfterMins, radius, generateBackup (bool) }
  */
 exports.createClassSession = async (professorId, data) => {
   const qrToken = generateQrToken();
+  
+  // 1. Force durations to be numbers
+  const duration = Number(data.durationMins) || 60;
+  const lateLimit = Number(data.lateAfterMins) || 15;
+  
+  // 2. Use millisecond math for bulletproof Date creation
+  const now = Date.now();
+  const sessionExpiresAt = new Date(now + (duration * 60 * 1000)); // Current time + duration in mins
+
   const session = {
     professorId,
     courseCode: data.courseCode,
     qrToken,
-    // keep backwards-compatible properties if callers use them
-    lat: data.lat,
-    lng: data.lng,
-    // also allow 'location' object if you prefer that in other parts of code
-    location: data.location ?? (data.lat && data.lng ? { lat: data.lat, lng: data.lng } : undefined),
-    radius: data.radius ?? 100,
-    durationMins: data.durationMins ?? 60,
-    lateAfterMins: data.lateAfterMins ?? 15,
-    startAt: new Date(),
+    // 3. Strictly adhere to your schema's location object format
+    location: {
+        lat: Number(data.lat || data.location?.lat),
+        lng: Number(data.lng || data.location?.lng)
+    },
+    radius: Number(data.radius) || 100,
+    durationMins: duration,
+    lateAfterMins: lateLimit,
+    startAt: new Date(now),
+    expiresAt: sessionExpiresAt, // 🔥 Required by your Mongoose Schema
     isActive: true,
   };
 
   if (data.generateBackup !== false) {
-    const code = generateBackupCode();
-    session.backupCode = code;
-    const expiry = new Date();
-    expiry.setMinutes(expiry.getMinutes() + (session.durationMins || 60) + 30);
-    session.backupExpiresAt = expiry;
+    session.backupCode = generateBackupCode();
+    // 4. Backup code expires 30 minutes AFTER the session ends
+    session.backupExpiresAt = new Date(now + ((duration + 30) * 60 * 1000)); 
   }
 
   const created = await Session.create(session);
@@ -64,7 +66,6 @@ exports.createClassSession = async (professorId, data) => {
 
 /**
  * Process a QR scan
- * studentId: ObjectId, payload: { qrToken, lat, lng, accuracy }
  */
 exports.processStudentScan = async (studentId, payload) => {
   const session = await this.findSessionByToken(payload.qrToken);
@@ -74,16 +75,15 @@ exports.processStudentScan = async (studentId, payload) => {
   const already = await this.hasStudentMarked(studentId, session._id);
   if (already) throw new Error('You have already marked attendance for this session.');
 
-  // Resolve session coords (support both legacy {lat,lng} and {location: {lat,lng}})
-  const sessionLat = (typeof session.lat === 'number') ? session.lat : session.location?.lat;
-  const sessionLng = (typeof session.lng === 'number') ? session.lng : session.location?.lng;
+  // Pull safely from the schema's location object
+  const sessionLat = session.location?.lat;
+  const sessionLng = session.location?.lng;
 
   if (typeof payload.lat === 'number' && typeof payload.lng === 'number') {
     if (sessionLat === undefined || sessionLng === undefined) {
       throw new Error('Session location is not defined on server.');
     }
 
-    // use the shared util
     const dist = calculateDistance(sessionLat, sessionLng, payload.lat, payload.lng);
 
     if (dist > (session.radius || 100)) {
@@ -94,9 +94,9 @@ exports.processStudentScan = async (studentId, payload) => {
     }
   }
 
-  // determine late/present using session.startAt and lateAfterMins
+  // determine late/present
   const now = new Date();
-  const diffMins = Math.floor((now - new Date(session.startAt)) / 60000);
+  const diffMins = Math.floor((now.getTime() - new Date(session.startAt).getTime()) / 60000);
   const status = diffMins > (session.lateAfterMins || 15) ? 'late' : 'present';
 
   const record = await Attendance.create({
@@ -114,16 +114,15 @@ exports.processStudentScan = async (studentId, payload) => {
 
 /**
  * Process manual code from a student.
- * studentId: ObjectId, code: string
  */
 exports.processManualCode = async (studentId, code) => {
   if (!code) throw new Error('No backup code provided.');
 
   const now = new Date();
   const session = await Session.findOne({
-    backupCode: code,
+    backupCode: String(code).trim(), 
     isActive: true,
-    backupExpiresAt: { $gt: now }
+    backupExpiresAt: { $gt: now } // 🔥 This will now correctly find codes in the future
   });
 
   if (!session) throw new Error('Invalid or expired backup code.');
@@ -131,7 +130,7 @@ exports.processManualCode = async (studentId, code) => {
   const already = await this.hasStudentMarked(studentId, session._id);
   if (already) throw new Error('You have already marked attendance for this session.');
 
-  const diffMins = Math.floor((now - new Date(session.startAt)) / 60000);
+  const diffMins = Math.floor((now.getTime() - new Date(session.startAt).getTime()) / 60000);
   const status = diffMins > (session.lateAfterMins || 15) ? 'late' : 'present';
 
   const record = await Attendance.create({
