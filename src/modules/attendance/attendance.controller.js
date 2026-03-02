@@ -4,7 +4,6 @@ const Attendance = require('../../models/Attendance');
 
 exports.startSession = async (req, res) => {
   try {
-    // allow professor to pass generateBackup: true/false in body
     const session = await attendanceService.createClassSession(req.user.id, req.body);
     res.status(201).json({ success: true, data: session });
   } catch (err) {
@@ -31,13 +30,16 @@ exports.markAttendance = async (req, res) => {
 exports.markAttendanceManual = async (req, res) => {
   try {
     const { code } = req.body;
-    const result = await attendanceService.processManualCode(req.user.id, code);
+    // We call the service which now handles the 10-second grace period
+    const record = await attendanceService.processManualCode(req.user.id, code);
+    
     res.status(200).json({
       success: true,
       message: 'Attendance marked (manual) successfully!',
-      data: result.record
+      data: record // Changed from result.record to record for consistency
     });
   } catch (err) {
+    // This will catch the "Expired" error from our service
     res.status(403).json({ success: false, message: err.message });
   }
 };
@@ -69,6 +71,8 @@ exports.getSessionDetails = async (req, res) => {
 
     const Session = require('../../models/Session');
     const session = await Session.findById(sessionId);
+
+    if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
 
     res.status(200).json({
       success: true,
