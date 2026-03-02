@@ -20,19 +20,25 @@ const attendanceSchema = new mongoose.Schema(
     },
     method: {
       type: String,
-      enum: ['qr', 'manual'],
-      default: 'qr',
+      enum: ['scan', 'manual'], // Changed 'qr' to 'scan' to match service logic
+      default: 'scan',
     },
 
-    // GPS debug fields (only used for QR)
-    recordedLat: { type: Number },
-    recordedLng: { type: Number },
+    // Matching the service logic: { lat, lng }
+    location: {
+      lat: { type: Number },
+      lng: { type: Number },
+    },
+    
+    // Store the distance for professor audit/disputes
+    distance: { type: Number },
+    
     recordedAccuracy: { type: Number },
   },
   { timestamps: true }
 );
 
-// 🔥 Prevent duplicate attendance for same student + session
+// Prevent duplicate attendance for same student + session
 attendanceSchema.index({ studentId: 1, sessionId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);
