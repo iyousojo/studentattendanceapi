@@ -1,6 +1,7 @@
 // controllers/attendance.controller.js
 const attendanceService = require('./attendance.service');
 const Attendance = require('../../models/Attendance');
+const Session = require('../../models/Session'); // Move this to top for cleaner code
 
 exports.startSession = async (req, res) => {
   try {
@@ -11,8 +12,12 @@ exports.startSession = async (req, res) => {
   }
 };
 
+/**
+ * Handles QR Code Scans
+ */
 exports.markAttendance = async (req, res) => {
   try {
+    // req.body contains { qrToken, lat, lng }
     const record = await attendanceService.processStudentScan(req.user.id, req.body);
     res.status(200).json({
       success: true,
@@ -21,25 +26,27 @@ exports.markAttendance = async (req, res) => {
     });
   } catch (err) {
     const debug = { message: err.message };
+    // Pass distance/radius to help the student know why they failed
     if (err.distance !== undefined) debug.distance = err.distance;
     if (err.radius !== undefined) debug.radius = err.radius;
     res.status(403).json({ success: false, ...debug });
   }
 };
 
+/**
+ * Handles 6-Digit Manual Backup Codes
+ */
 exports.markAttendanceManual = async (req, res) => {
   try {
-    const { code } = req.body;
-    // We call the service which now handles the 10-second grace period
-    const record = await attendanceService.processManualCode(req.user.id, code);
+    // req.body contains { code, lat, lng }
+    const record = await attendanceService.processManualCode(req.user.id, req.body);
     
     res.status(200).json({
       success: true,
       message: 'Attendance marked (manual) successfully!',
-      data: record // Changed from result.record to record for consistency
+      data: record
     });
   } catch (err) {
-    // This will catch the "Expired" error from our service
     res.status(403).json({ success: false, message: err.message });
   }
 };
@@ -68,11 +75,11 @@ exports.getSessionDetails = async (req, res) => {
   try {
     const { sessionId } = req.params;
     const attendees = await attendanceService.getAttendeesBySession(sessionId);
-
-    const Session = require('../../models/Session');
     const session = await Session.findById(sessionId);
 
-    if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
+    if (!session) {
+        return res.status(404).json({ success: false, message: 'Session not found' });
+    }
 
     res.status(200).json({
       success: true,
