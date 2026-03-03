@@ -10,16 +10,17 @@ exports.protect = async (req, res, next) => {
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded; // Contains { id, role }
-        next();
+        next(); // Successfully moves to the next middleware or controller
     } catch (error) {
-        res.status(401).json({ success: false, message: "Token is invalid" });
+        // Use 'return' to ensure the function stops execution here
+        return res.status(401).json({ success: false, message: "Token is invalid" });
     }
 };
 
 exports.isProfessor = (req, res, next) => {
     if (req.user && req.user.role === 'professor') {
-        next();
+        next(); 
     } else {
         res.status(403).json({ success: false, message: "Access denied: Professors only" });
     }
-};
+}; 
