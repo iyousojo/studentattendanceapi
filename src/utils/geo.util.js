@@ -3,13 +3,18 @@
 /**
  * calculateDistance(lat1, lon1, lat2, lon2)
  * Returns distance in meters (Number, rounded to 2 decimal places)
- * Throws if inputs are invalid.
  */
 function calculateDistance(lat1, lon1, lat2, lon2) {
-  // Basic validation
+  // 1. Basic type and existence validation
   const nums = [lat1, lon1, lat2, lon2];
   if (nums.some((n) => n === undefined || n === null || typeof n !== 'number' || Number.isNaN(n))) {
-    throw new Error('Invalid coordinates provided to calculateDistance.');
+    throw new Error('Invalid coordinates: All inputs must be valid numbers.');
+  }
+
+  // 2. "Null Island" Check
+  // Prevents successful (but fake) syncs if both coordinates are exactly 0
+  if ((lat1 === 0 && lon1 === 0) || (lat2 === 0 && lon2 === 0)) {
+    throw new Error('GPS Signal Lost: Location coordinates cannot be zero.');
   }
 
   const toRadians = (deg) => deg * (Math.PI / 180);
@@ -20,6 +25,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const Δφ = toRadians(lat2 - lat1);
   const Δλ = toRadians(lon2 - lon1);
 
+  // Haversine Formula
   const a =
     Math.sin(Δφ / 2) ** 2 +
     Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
@@ -27,7 +33,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c;
 
-  // Round to 2 decimals
+  // Round to 2 decimals for the Registry logs
   return Math.round(distance * 100) / 100;
 }
 

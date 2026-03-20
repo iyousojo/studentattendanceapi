@@ -17,19 +17,20 @@ exports.startSession = async (req, res) => {
  */
 exports.markAttendance = async (req, res) => {
   try {
-    // req.body contains { qrToken, lat, lng }
-    const record = await attendanceService.processStudentScan(req.user.id, req.body);
-    res.status(200).json({
-      success: true,
-      message: 'Attendance marked successfully!',
-      data: record
+    // Add deviceId from headers or body for security
+    const record = await attendanceService.processStudentScan(req.user.id, {
+      ...req.body,
+      deviceId: req.headers['x-device-id'] 
     });
+
+    res.status(200).json({ success: true, data: record });
   } catch (err) {
-    const debug = { message: err.message };
-    // Pass distance/radius to help the student know why they failed
-    if (err.distance !== undefined) debug.distance = err.distance;
-    if (err.radius !== undefined) debug.radius = err.radius;
-    res.status(403).json({ success: false, ...debug });
+    res.status(403).json({ 
+      success: false, 
+      message: err.message,
+      distance: err.distance, // Sent back for the UI "Error" state
+      radius: err.radius 
+    });
   }
 };
 

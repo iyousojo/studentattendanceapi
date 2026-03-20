@@ -41,32 +41,39 @@ exports.createClassSession = async (professorId, data) => {
 };
 
 /**
- * Validates a QR scan and marks attendance
+ * Validates a QR scan and marks attendance with Device ID check
  */
-exports.processStudentScan = async (studentId, data) => {
-  const { qrToken, lat, lng } = data;
+exports.processStudentScan = async (userId, data) => {
+  const { qrToken, lat, lng, deviceId } = data;
 
+  // 1. Validate User & Device
+  const user = await User.findById(userId);
+  if (user.deviceId && user.deviceId !== deviceId) {
+    throw new Error('Device mismatch. Use your registered device.');
+  }
+
+  // 2. Find Active Session
   const session = await Session.findOne({ qrToken, isActive: true });
-  if (!session) throw new Error('Invalid or expired QR code.');
+  if (!session || session.expiresAt < new Date()) {
+    if (session) session.isActive = false; await session.save(); // Auto-close
+    throw new Error('This session has expired.');
+  }
 
-  // GEO-FENCING CHECK
+  // 3. Geo-Fencing
   const distance = calculateDistance(lat, lng, session.location.lat, session.location.lng);
-  
   if (distance > session.radius) {
-    const geoErr = new Error(`Too far from class: ${Math.round(distance)}m away.`);
+    const geoErr = new Error(`Spatial verification failed: ${Math.round(distance)}m away.`);
     geoErr.distance = distance;
     geoErr.radius = session.radius;
     throw geoErr;
   }
 
-  const already = await Attendance.exists({ studentId, sessionId: session._id });
-  if (already) throw new Error('Attendance already marked.');
-
+  // 4. Record Attendance
   const diffMins = Math.floor((Date.now() - session.startAt.getTime()) / 60000);
   const status = diffMins > session.lateAfterMins ? 'late' : 'present';
 
   return await Attendance.create({
-    studentId,
+    studentId: userId,
     sessionId: session._id,
     status,
     method: 'scan',
