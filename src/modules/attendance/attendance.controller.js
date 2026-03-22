@@ -90,4 +90,12 @@ exports.getSessionDetails = async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
+};// Add this function to your controller
+exports.getActiveSessions = async (req, res) => {
+  try {
+    const sessions = await Session.find({ isActive: true });
+    res.status(200).json({ success: true, sessions });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 };

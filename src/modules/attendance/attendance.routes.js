@@ -13,4 +13,5 @@ router.get('/list', protect, attendanceController.getAttendanceList);
 router.get('/professor/sessions', protect, isProfessor, attendanceController.getProfessorHistory);
 router.get('/session-details/:sessionId', protect, isProfessor, attendanceController.getSessionDetails);
 
+router.get('/active-deployments', protect, attendanceController.getActiveSessions);
 module.exports = router;
