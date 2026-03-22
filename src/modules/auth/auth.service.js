@@ -1,12 +1,22 @@
 const User = require('../../models/User');
 const jwt = require('jsonwebtoken');
 
-// @desc    Logic for registering a user
+
+// @desc    Logic for registering a user (Updated for Hardware Binding)
 exports.registerUser = async (userData) => {
-    const userExists = await User.findOne({ email: userData.email });
+    // 1. Normalize email to prevent "Email Not Found" errors due to casing
+    const normalizedEmail = userData.email.toLowerCase().trim();
+
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) throw new Error('User already exists');
 
-    return await User.create(userData);
+    // 2. Create user with all data, including deviceId if provided by frontend
+    const user = await User.create({
+        ...userData,
+        email: normalizedEmail
+    });
+
+    return user;
 };
 
 // @desc    Logic for authenticating a user with Hardware Binding + Magic Reset
