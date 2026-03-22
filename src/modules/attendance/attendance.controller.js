@@ -98,4 +98,30 @@ exports.getActiveSessions = async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
+};// controllers/attendance.controller.js
+
+exports.getStudentStats = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    
+    // Count records based on the 'status' field defined in your service
+    const attendedCount = await Attendance.countDocuments({ 
+      studentId, 
+      status: 'present' 
+    });
+    
+    const lateCount = await Attendance.countDocuments({ 
+      studentId, 
+      status: 'late' 
+    });
+
+    res.status(200).json({
+      success: true,
+      attendedCount,
+      lateCount,
+      user: req.user // Keep for hardware sync
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 };
