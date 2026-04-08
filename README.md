@@ -25,21 +25,36 @@ RBAC (Role-Based Access Control): Specific endpoints (e.g., /students, /geofence
 Password Hashing: Implemented using Argon2 or BCrypt to ensure data-at-rest security.
 
 🚀 API Endpoints
+
 Authentication
+
 Method	Endpoint	Description
+
 POST	/auth/register	Initializes a new Faculty Registry Node.
+
 POST	/auth/login	Validates credentials and returns a JWT.
+
+
 Attendance & Sessions
+
 Method	Endpoint	Description
+
 GET	/sessions	Fetches all past and active broadcast logs.
+
 POST	/sessions/start	Generates a new secure QR/Geofence session.
+
 PATCH	/sessions/:id	Updates session status (Active/Closed).
+
 Student Management
+
 Method	Endpoint	Description
+
 GET	/students	Retrieves the full student directory.
+
 POST	/students/verify	Validates a student's check-in via GPS + QR.
 
 🛠️ Environment Configuration
+
 To run this API locally, create a .env file in the root directory:
 
 Code snippet
