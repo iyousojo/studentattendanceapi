@@ -1,93 +1,89 @@
-.
+# 🛠️ Student Attendance API
 
-🛠️ Faculty Terminal API | Documentation
-This is the core engine for the Student Attendance System. It handles secure faculty authentication, student record management, geofencing validation
+[![Node.js](https://img.shields.io/badge/Node.js-v20-green)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/Express-4.x-blue)](https://expressjs.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-6.x-green)](https://mongodb.com/)
 
-🔗 Base URL
-https://studentattendanceapi-v4hq.onrender.com/api
+**Backend API for secure faculty-led student attendance tracking using QR codes, geofencing, and manual fallback.**
 
-📡 System Architecture
-The API follows a RESTful architecture with middleware layers for authentication and role-based access control.
+## 🚀 Quick Start (Local)
 
-Auth Layer: JWT-based stateless authentication.
+1. **Clone & Install**
+   ```bash
+   git clone <repo>
+   cd studentattendanceapi
+   npm install
+   ```
 
-Storage: MongoDB (NoSQL) for flexible student/faculty schemas.
+2. **Environment Setup** (`.env`)
+   ```
+   PORT=3000
+   MONGO_URI=mongodb://localhost:27017/attendance_db
+   JWT_SECRET=your-super-secret-jwt-key-min32chars
+   ```
 
-Cache/Limit Layer: Upstash Redis for handling session synchronization and rate limiting.
+3. **Run Server**
+   ```bash
+   npm run dev  # Development with nodemon
+   # or
+   npm start    # Production
+   ```
 
+   Server runs at `http://localhost:3000`
 
+## 📡 Base URL
+`http://localhost:3000`
 
-🔐 Security Protocols
-Terminal Fingerprinting: The API validates the deviceId header to ensure requests originate from a registered hardware node.
+## 🏗️ Architecture
+- **Framework**: Express.js with modular routes/services/repo pattern.
+- **Database**: MongoDB (Mongoose ODM) - Models: `User` (faculty/student), `Session`, `Attendance`.
+- **Auth**: JWT tokens, bcrypt hashing, RBAC middleware (`protect`, `isProfessor`).
+- **Features**: Geofencing (`geo.util.js`), QR/session scanning, dashboard stats.
 
-RBAC (Role-Based Access Control): Specific endpoints (e.g., /students, /geofence) are restricted to users with the professor or admin role.
+## 🔐 Security
+- JWT stateless authentication.
+- Role-Based Access Control (RBAC): Professor-only for session management.
+- Password hashing with bcryptjs.
+- CORS enabled.
 
-Password Hashing: Implemented using Argon2 or BCrypt to ensure data-at-rest security.
+## 📋 API Endpoints
 
-🚀 API Endpoints
+### Authentication (`/api/auth`)
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/register` | Register new faculty/student | None |
+| POST | `/login` | Login & receive JWT | None |
+| GET | `/profile` | User profile & stats | Required |
 
-Authentication
+### Attendance (`/api/attendance`)
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/session` | Start new session (QR/geofence) | Professor |
+| POST | `/scan` | Mark attendance via scan | User |
+| POST | `/manual` | Manual attendance entry | User |
+| GET | `/list` | Attendance records list | User |
+| GET | `/professor/sessions` | Professor session history | Professor |
+| GET | `/session-details/:sessionId` | Session details | Professor |
+| GET | `/student/stats` | Student stats | User |
+| GET | `/active-deployments` | Active sessions | User |
 
-Method	Endpoint	Description
+**Health Check**: `GET /` - Server status.
 
-POST	/auth/register	Initializes a new Faculty Registry Node.
+## 📦 Scripts
+- `npm run dev` - Dev server (nodemon).
+- `npm start` - Prod server.
 
-POST	/auth/login	Validates credentials and returns a JWT.
+## 🛠️ Deployment
+- **Heroku/Render**: Set env vars, `npm start`.
+- **Docker**: Add Dockerfile for containerization.
 
+## 🤝 Contributing
+1. Fork & PR.
+2. Follow existing code style.
 
-Attendance & Sessions
+## 📄 License
+ISC
 
-Method	Endpoint	Description
+**Developed with ❤️ for efficient classroom attendance.**
 
-GET	/sessions	Fetches all past and active broadcast logs.
-
-POST	/sessions/start	Generates a new secure QR/Geofence session.
-
-PATCH	/sessions/:id	Updates session status (Active/Closed).
-
-Student Management
-
-Method	Endpoint	Description
-
-GET	/students	Retrieves the full student directory.
-
-POST	/students/verify	Validates a student's check-in via GPS + QR.
-
-🛠️ Environment Configuration
-
-To run this API locally, create a .env file in the root directory:
-
-Code snippet
-PORT=5000
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_super_secret_cipher
-UPSTASH_REDIS_URL=your_redis_url
-
-📦 Local Deployment
-Install dependencies:
-
-Bash
-npm install
-Start development server:
-
-Bash
-npm run dev
-Production build:
-
-Bash
-npm start
-⚠️ Important Notes
-Render Cold Starts: This API is hosted on a Render free instance. If inactive, the service will "sleep." The first request may take up to 50 seconds to wake the server.
-
-CORS Policy: The API is configured to accept requests only from authorized Vercel domains. Update your cors middleware when adding new frontend deployments.
-
-📜 Error Code Registry
-401 Unauthorized: Missing or invalid JWT.
-
-403 Forbidden: Role mismatch (Student attempting to access Faculty data).
-
-429 Too Many Requests: Redis rate limit triggered.
-
-503 Service Unavailable: Database or Redis connection failure.
-
-Developed by solomon johnbull iyoubhebhe
+**Progress: Check TODO.md**
