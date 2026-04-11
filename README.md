@@ -4,7 +4,7 @@
 [![Express](https://img.shields.io/badge/Express-4.x-blue)](https://expressjs.com/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-6.x-green)](https://mongodb.com/)
 
-**Backend API for secure faculty-led student attendance tracking using QR codes, geofencing, and manual fallback.**
+**Backend API for secure faculty-led student attendance tracking using QR codes, geofencing (via geo.util.js), and manual fallback. Version 1.0.0**
 
 ## 🚀 Quick Start (Local)
 
@@ -69,8 +69,10 @@
 
 **Health Check**: `GET /` - Server status.
 
+**API Documentation**: Interactive Swagger UI available (see swagger.yaml).
+
 ## 📦 Scripts
-- `npm run dev` - Dev server (nodemon).
+- `npm run dev` - Dev server with nodemon (server.js).
 - `npm start` - Prod server.
 
 ## 🛠️ Deployment
@@ -86,4 +88,3 @@ ISC
 
 **Developed with ❤️ for efficient classroom attendance.**
 
-**Progress: Check TODO.md**

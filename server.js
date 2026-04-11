@@ -3,7 +3,9 @@ const express = require('express');
 const cors = require('cors');
 // FIXED PATH: jumping into src/config
 const { connectDB } = require('./src/config/db'); 
-
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
+const swaggerDocument = YAML.load('./swagger.yaml');
 const app = express();
 
 // Connect to Local MongoDB
@@ -20,6 +22,7 @@ const attendanceRoutes = require('./src/modules/attendance/attendance.routes');
 // Route Mounting
 app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Basic Health Check
 app.get('/', (req, res) => {
