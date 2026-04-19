@@ -1,13 +1,13 @@
 openapi: 3.0.0
 info:
-  title: Student Notification System API
-  version: 2.2.0
+  title: Student Attendance API
+  version: 1.0.0
   description: |
-    Real-time notification hub with WebSocket support. 
-    Users are scoped by Faculty and Department for targeted broadcasts.
+    QR Code + Geofence-based attendance system for classrooms.
+    Professors create sessions with QR/geofence. Students scan QR or enter manually/geo-verify.
 
 servers:
-  - url: http://localhost:5000
+  - url: http://localhost:3000/api
     description: Development Server
 
 components:
@@ -21,42 +21,107 @@ components:
     User:
       type: object
       properties:
-        id: { type: string, example: "60d5ecb71" }
-        name: { type: string, example: "John Doe" }
-        email: { type: string, format: email, example: "ar" }
-        role: 
+        id:
           type: string
-          enum: [SuperAdmin, SchoolAdmin, FacultyAdmin, DepartmentAdmin, Student]
-          default: Student
-        verified: { type: Boolean, example: true }
+          example: "64f7b1234567890abcdef123"
+        name:
+          type: string
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          example: "john@example.com"
+        role:
+          type: string
+          enum: [student, professor]
+          example: "student"
         faculty:
           type: string
-          enum: [Science, Physical Science, Engineering, Arts, Social Science, Management]
+          example: "Engineering"
         department:
           type: string
-          description: Must be a valid department within the chosen faculty.
           example: "Computer Science"
-        profilePic: 
-          type: string
-          format: uri
-          example: "https://cdn-icons-png.flaticon.com/512/847/847969.png"
 
-    Notification:
+    Session:
       type: object
       properties:
-        id: { type: string }
-        title: { type: string }
-        content: { type: string }
-        targetFaculty: { type: string }
-        targetDepartment: { type: string }
+        id:
+          type: string
+          example: "64f7b1234567890abcdef456"
+        professorId:
+          type: string
+          example: "64f7b1234567890abcdeff00"
+        qrCode:
+          type: string
+          example: "QR_SESSION_ABC123"
+        geofence:
+          type: object
+          properties:
+            lat:
+              type: number
+              example: 37.7749
+            lng:
+              type: number
+              example: -122.4194
+            radius:
+              type: number
+              example: 50  # meters
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, closed]
+          example: "active"
+
+    AttendanceRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        studentId:
+          type: string
+        sessionId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        method:
+          type: string
+          enum: [qr_scan, manual, geofence]
+        location:
+          type: object
+          properties:
+            lat:
+              type: number
+            lng:
+              type: number
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        user:
+          $ref: '#/components/schemas/User'
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Session not active"
 
 paths:
-  # --- AUTHENTICATION ---
-  /api/auth/register:
+  # Authentication
+  /auth/register:
     post:
       tags: [Authentication]
-      summary: Register a new user
-      description: Creates a user account. Faculty and Department are required for Students and Faculty/Dept Admins.
+      summary: Register new user
       requestBody:
         required: true
         content:
@@ -65,80 +130,180 @@ paths:
               type: object
               required: [name, email, password]
               properties:
-                name: { type: string }
-                email: { type: string }
-                password: { type: string, format: password }
-                role: { type: string, enum: [Student, FacultyAdmin, DepartmentAdmin] }
-                faculty: { type: string }
-                department: { type: string }
+                name: {type: string}
+                email: {type: string, format: email}
+                password: {type: string, writeOnly: true}
+                role: {type: string, enum: [student, professor]}
+                faculty: {type: string}
+                department: {type: string}
       responses:
         '201':
-          description: User created. Check email for verification link.
-
-  # --- REAL-TIME & UPDATES ---
-  /api/updates/poll:
-    get:
-      tags: [Real-time]
-      summary: Long-polling endpoint for scoped updates
-      description: Returns notifications and announcements filtered by the authenticated user's Faculty and Department.
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: lastCheck
-          in: query
-          schema:
-            type: string
-            format: date-time
-      responses:
-        '200':
-          description: Success
+          description: User registered
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Notification'
+                $ref: '#/components/schemas/User'
 
-  # --- MANAGEMENT ---
-  /api/notifications:
+  /auth/login:
     post:
-      tags: [Management]
-      summary: Create and broadcast a notification
-      description: |
-        Requires SuperAdmin, SchoolAdmin, FacultyAdmin, or DepartmentAdmin privileges. 
-        Automatically triggers WebSocket broadcast and Email Worker.
-      security:
-        - bearerAuth: []
+      tags: [Authentication]
+      summary: Login and get JWT token
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [title, content]
+              required: [email, password]
               properties:
-                title: { type: string }
-                content: { type: string }
-                targetFaculty: { type: string }
-                targetDepartment: { type: string }
+                email: {type: string}
+                password: {type: string}
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+
+  /auth/profile:
+    get:
+      tags: [Authentication]
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  # Attendance Sessions (Professor only)
+  /attendance/session:
+    post:
+      tags: [Attendance]
+      summary: Start new attendance session (Professor)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                geofence:
+                  type: object
+                  properties:
+                    lat: {type: number}
+                    lng: {type: number}
+                    radius: {type: number}
+                durationMinutes: {type: number, example: 60}
       responses:
         '201':
-          description: Notification created and queued for delivery
+          description: Session started with QR code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
 
-  # --- UTILITIES ---
-  /api/calendar/{date}:
+  /attendance/scan:
+    post:
+      tags: [Attendance]
+      summary: Mark attendance via QR scan
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                qrCode: {type: string}
+                location: {type: object, properties: {lat: {type: number}, lng: {type: number}}}
+      responses:
+        '200':
+          description: Attendance marked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceRecord'
+
+  /attendance/manual:
+    post:
+      tags: [Attendance]
+      summary: Manual attendance mark (fallback)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionId: {type: string}
+                reason: {type: string}
+      responses:
+        '200':
+          description: Manual attendance recorded
+
+  /attendance/list:
     get:
-      tags: [Utilities]
-      summary: Fetch academic schedule for a specific day
+      tags: [Attendance]
+      summary: Get attendance list for session
       security:
         - bearerAuth: []
       parameters:
-        - name: date
-          in: path
-          required: true
-          schema:
-            type: string
-            example: "2026-04-12"
+        - name: sessionId
+          in: query
+          schema: {type: string}
       responses:
         '200':
-          description: List of notifications and announcements for the date
+          description: List of attendance records
+
+  /attendance/professor/sessions:
+    get:
+      tags: [Attendance]
+      summary: Professor session history
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Professor's past sessions
+
+  /attendance/session-details/{sessionId}:
+    get:
+      tags: [Attendance]
+      summary: Session details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Full session details
+
+  /attendance/student/stats:
+    get:
+      tags: [Attendance]
+      summary: Student attendance stats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Personal stats
+
+  /attendance/active-deployments:
+    get:
+      tags: [Attendance]
+      summary: Active sessions (for scanning UI)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of active sessions
+
