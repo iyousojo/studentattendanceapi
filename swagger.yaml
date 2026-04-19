@@ -1,12 +1,14 @@
 openapi: 3.0.0
 info:
-  title: Smart Attendance API
-  version: 1.0.0
-  description: API Documentation for the Student Attendance Ecosystem
+  title: Student Notification System API
+  version: 2.2.0
+  description: |
+    Real-time notification hub with WebSocket support. 
+    Users are scoped by Faculty and Department for targeted broadcasts.
 
 servers:
-  - url: http://localhost:3000
-    description: Local development server
+  - url: http://localhost:5000
+    description: Development Server
 
 components:
   securitySchemes:
@@ -15,39 +17,128 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, example: "60d5ecb71" }
+        name: { type: string, example: "John Doe" }
+        email: { type: string, format: email, example: "ar" }
+        role: 
+          type: string
+          enum: [SuperAdmin, SchoolAdmin, FacultyAdmin, DepartmentAdmin, Student]
+          default: Student
+        verified: { type: Boolean, example: true }
+        faculty:
+          type: string
+          enum: [Science, Physical Science, Engineering, Arts, Social Science, Management]
+        department:
+          type: string
+          description: Must be a valid department within the chosen faculty.
+          example: "Computer Science"
+        profilePic: 
+          type: string
+          format: uri
+          example: "https://cdn-icons-png.flaticon.com/512/847/847969.png"
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        content: { type: string }
+        targetFaculty: { type: string }
+        targetDepartment: { type: string }
+
 paths:
+  # --- AUTHENTICATION ---
   /api/auth/register:
     post:
       tags: [Authentication]
       summary: Register a new user
+      description: Creates a user account. Faculty and Department are required for Students and Faculty/Dept Admins.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string }
+                password: { type: string, format: password }
+                role: { type: string, enum: [Student, FacultyAdmin, DepartmentAdmin] }
+                faculty: { type: string }
+                department: { type: string }
       responses:
         '201':
-          description: User created successfully
+          description: User created. Check email for verification link.
 
-  /api/auth/login:
-    post:
-      tags: [Authentication]
-      summary: Authenticate user & get token
-      responses:
-        '200':
-          description: Login successful
-
-  /api/attendance/session:
-    post:
-      tags: [Attendance]
-      summary: Start a new attendance session
+  # --- REAL-TIME & UPDATES ---
+  /api/updates/poll:
+    get:
+      tags: [Real-time]
+      summary: Long-polling endpoint for scoped updates
+      description: Returns notifications and announcements filtered by the authenticated user's Faculty and Department.
       security:
         - bearerAuth: []
+      parameters:
+        - name: lastCheck
+          in: query
+          schema:
+            type: string
+            format: date-time
       responses:
         '200':
-          description: Session started (Professors only)
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
 
-  /api/attendance/scan:
+  # --- MANAGEMENT ---
+  /api/notifications:
     post:
-      tags: [Attendance]
-      summary: Mark student attendance via scan
+      tags: [Management]
+      summary: Create and broadcast a notification
+      description: |
+        Requires SuperAdmin, SchoolAdmin, FacultyAdmin, or DepartmentAdmin privileges. 
+        Automatically triggers WebSocket broadcast and Email Worker.
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content]
+              properties:
+                title: { type: string }
+                content: { type: string }
+                targetFaculty: { type: string }
+                targetDepartment: { type: string }
+      responses:
+        '201':
+          description: Notification created and queued for delivery
+
+  # --- UTILITIES ---
+  /api/calendar/{date}:
+    get:
+      tags: [Utilities]
+      summary: Fetch academic schedule for a specific day
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "2026-04-12"
       responses:
         '200':
-          description: Attendance recorded
+          description: List of notifications and announcements for the date
